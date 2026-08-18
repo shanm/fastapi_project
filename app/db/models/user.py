@@ -1,13 +1,18 @@
 import uuid
+from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Boolean, ForeignKey
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.models.base import Base
-from app.db.models.mixins import TimestampMixin, SoftDeleteMixin
+from app.db.models.base import BaseModel
+from app.db.models.mixins import SoftDeleteMixin
 
-class User(Base, TimestampMixin, SoftDeleteMixin):
+if TYPE_CHECKING:
+    from app.db.models.role import Role
+
+
+class User(BaseModel, SoftDeleteMixin):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -37,14 +42,15 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
+        server_default="true",
     )
 
     role_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("roles.id"),
+        nullable=False,
     )
 
-    role = relationship(
-        "Role",
+    role: Mapped["Role"] = relationship(
         back_populates="users",
     )

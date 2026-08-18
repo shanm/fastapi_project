@@ -1,15 +1,18 @@
 from fastapi import FastAPI
-from app.api.v1.endpoints import users
+
+from app.api.v1.router import api_router
+from app.core.config import settings
 
 app = FastAPI(
-    title="FastAPI User Management",
+    title=settings.APP_NAME,
 )
 
-app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
+app.include_router(
+    api_router,
+    prefix=settings.API_V1_STR,
+)
 
 
 @app.get("/")
 async def root():
-    return {
-        "message": "Application is running"
-    }
+    return {"message": "Application is running"}
