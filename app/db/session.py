@@ -1,16 +1,15 @@
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
-    async_sessionmaker,
     AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
 
 from app.core.config import settings
-
 from app.db.models import *  # noqa
 
 engine = create_async_engine(
     settings.database_url,
-    echo=True,
+    echo=settings.DEBUG,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -19,8 +18,3 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
     class_=AsyncSession,
 )
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session

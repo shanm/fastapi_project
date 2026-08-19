@@ -1,0 +1,8 @@
+-r requirements.txt
+
+pyright
+pytest
+pytest-asyncio
+httpx
+httpx2
+ruff

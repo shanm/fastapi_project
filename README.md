@@ -23,7 +23,7 @@ This project uses `.env` for environment-specific configuration and a PostgreSQL
 
 ### Services
 
-- `app` — FastAPI application running with `uvicorn`
+- `api` — FastAPI application running with `uvicorn`
 - `db` — PostgreSQL database container
 
 ### Environment
@@ -44,5 +44,5 @@ Example values are provided in `.env.example`.
   ```
 - Run tests inside the app container:
   ```bash
-  docker compose exec app pytest
+  docker compose exec api pytest
   ```

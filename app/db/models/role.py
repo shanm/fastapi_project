@@ -1,13 +1,17 @@
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.models.base import Base
-from app.db.models.mixins import TimestampMixin
+from app.db.models.base import BaseModel
 
-class Role(Base, TimestampMixin):
+if TYPE_CHECKING:
+    from app.db.models.user import User
+
+
+class Role(BaseModel):
     __tablename__ = "roles"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -22,7 +26,7 @@ class Role(Base, TimestampMixin):
         nullable=False,
     )
 
-    users = relationship(
+    users: Mapped[list["User"]] = relationship(
         "User",
         back_populates="role",
     )

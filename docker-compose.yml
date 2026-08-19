@@ -1,16 +1,21 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     container_name: fastapi-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
-    env_file:
-      - .env
+      redis:
+        condition: service_healthy
 
   db:
     image: postgres:17
@@ -29,6 +34,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
 volumes:
   postgres_data:
