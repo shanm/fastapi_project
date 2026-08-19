@@ -1,5 +1,6 @@
 from typing import Annotated
 
+from app.api.dependencies.auth import get_current_active_user
 from app.core import redis
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -12,10 +13,14 @@ from app.core.exceptions import (
     RoleNotFoundException,
     UserAlreadyExistsException,
 )
+from app.db.models.user import User
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     RefreshTokenRequest,
     TokenResponse,
+    LogoutResponse,
+    ChangePasswordResponse,
 )
 from app.schemas.user import UserCreate, UserResponse
 from app.services.auth_service import AuthService
@@ -34,8 +39,13 @@ router = APIRouter()
 async def register(
     user_data: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> UserResponse:
-    service = AuthService(db)
+
+    service = AuthService(
+        db=db,
+        redis=redis,
+    )
 
     try:
         user = await service.register(user_data)
@@ -133,3 +143,60 @@ async def refresh_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
+
+
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+)
+async def logout(
+    request: RefreshTokenRequest,
+    redis: Annotated[Redis, Depends(get_redis)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LogoutResponse:
+
+    service = AuthService(
+        db=db,
+        redis=redis,
+    )
+
+    await service.logout(request.refresh_token)
+
+    return LogoutResponse()
+
+
+@router.post(
+    "/change-password",
+    response_model=ChangePasswordResponse,
+)
+async def change_password(
+    request: ChangePasswordRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    current_user: Annotated[
+        User,
+        Depends(get_current_active_user),
+    ],
+) -> ChangePasswordResponse:
+
+    service = AuthService(
+        db=db,
+        redis=redis,
+    )
+
+    try:
+        await service.change_password(
+            current_user.id,
+            request.current_password,
+            request.new_password,
+        )
+    except InvalidCredentialsException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={
+                "WWW-Authenticate": "Bearer",
+            },
+        ) from exc
+
+    return ChangePasswordResponse()

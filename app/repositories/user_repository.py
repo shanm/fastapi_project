@@ -28,7 +28,13 @@ class UserRepository:
         self,
         email: str,
     ) -> User | None:
-        result = await self.db.execute(select(User).where(User.email == email))
+
+        result = await self.db.execute(
+            select(User).where(
+                User.email == email,
+                User.is_deleted.is_(False),
+            )
+        )
 
         return result.scalar_one_or_none()
 
@@ -36,7 +42,13 @@ class UserRepository:
         self,
         username: str,
     ) -> User | None:
-        result = await self.db.execute(select(User).where(User.username == username))
+
+        result = await self.db.execute(
+            select(User).where(
+                User.username == username,
+                User.is_deleted.is_(False),
+            )
+        )
 
         return result.scalar_one_or_none()
 
@@ -48,6 +60,19 @@ class UserRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_or_create_role(
+        self,
+        name: str,
+    ) -> Role:
+        role = await self.get_role_by_name(name)
+
+        if role is None:
+            role = Role(name=name)
+            self.db.add(role)
+            await self.db.flush()
+
+        return role
+
     async def create(
         self,
         user: User,
@@ -56,6 +81,18 @@ class UserRepository:
 
         await self.db.commit()
 
+        await self.db.refresh(user)
+
+        return user
+
+    async def update_password(
+        self,
+        user: User,
+        hashed_password: str,
+    ) -> User:
+        user.hashed_password = hashed_password
+
+        await self.db.commit()
         await self.db.refresh(user)
 
         return user

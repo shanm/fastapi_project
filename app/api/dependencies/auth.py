@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.database import get_db
 from app.core.security import decode_token
+from app.db.models.user import User
 from app.repositories.user_repository import UserRepository
 
 
@@ -50,8 +51,11 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user=Depends(get_current_user),
-):
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+) -> User:
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

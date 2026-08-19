@@ -59,7 +59,7 @@ def create_access_token(user_id: UUID) -> str:
 
 def create_refresh_token(
     user_id: UUID,
-) -> tuple[str, str]:
+) -> str:
     now = datetime.now(timezone.utc)
 
     expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
@@ -80,7 +80,7 @@ def create_refresh_token(
         algorithm=settings.ALGORITHM,
     )
 
-    return token, jti
+    return token
 
 
 def decode_token(

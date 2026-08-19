@@ -3,9 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def test_register_user() -> None:
-    client = TestClient(app)
-
+def test_register_user(client) -> None:
     response = client.post(
         "/api/v1/users/",
         json={

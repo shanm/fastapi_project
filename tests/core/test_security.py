@@ -23,6 +23,34 @@ def test_access_token_cannot_be_used_as_refresh_token():
         )
 
 
+def test_access_token_cannot_refresh(
+    client,
+    authenticated_user,
+):
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": authenticated_user["access_token"],
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_refresh_token_cannot_access_protected_endpoint(
+    client,
+    authenticated_user,
+):
+    response = client.get(
+        "/api/v1/users/me",
+        headers={
+            "Authorization": (f"Bearer {authenticated_user['refresh_token']}"),
+        },
+    )
+
+    assert response.status_code == 401
+
+
 def test_password_hashing():
     password = "MySecurePassword123"
 

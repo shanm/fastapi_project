@@ -15,18 +15,18 @@ from app.core.security import (
     verify_password,
 )
 
+from app.services.token_service import (
+    get_refresh_token_user,
+    revoke_refresh_token,
+    store_refresh_token,
+)
+
 from app.db.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import UserCreate
 
 from redis.asyncio import Redis
-
-from app.services.token_service import (
-    get_refresh_token_user,
-    revoke_refresh_token,
-    store_refresh_token,
-)
 
 from app.core.config import settings
 
@@ -49,7 +49,8 @@ class AuthService:
         """
 
         # 1. Check email
-        existing_email = await self.repository.get_by_email(str(user_data.email))
+        email = str(user_data.email).strip().lower()
+        existing_email = await self.repository.get_by_email(email)
 
         if existing_email:
             raise UserAlreadyExistsException("Email is already registered.")
@@ -60,11 +61,8 @@ class AuthService:
         if existing_username:
             raise UserAlreadyExistsException("Username is already registered.")
 
-        # 3. Get default USER role
-        role = await self.repository.get_role_by_name("USER")
-
-        if role is None:
-            raise RoleNotFoundException("Default USER role does not exist.")
+        # 3. Get or provision the default USER role
+        role = await self.repository.get_or_create_role("USER")
 
         # 4. Hash password
         hashed_password = hash_password(user_data.password)
@@ -87,8 +85,8 @@ class AuthService:
         """
         Authenticate user and generate access/refresh tokens.
         """
-
-        user = await self.repository.get_by_email(str(login_data.email))
+        email = str(login_data.email).strip().lower()
+        user = await self.repository.get_by_email(email)
 
         # Don't reveal whether email exists.
         if user is None:
@@ -110,7 +108,8 @@ class AuthService:
         # Create tokens
         access_token = create_access_token(user.id)
 
-        refresh_token, refresh_jti = create_refresh_token(user.id)
+        refresh_token = create_refresh_token(user.id)
+        _, refresh_jti = decode_refresh_token(refresh_token)
 
         await store_refresh_token(
             redis=self.redis,
@@ -167,7 +166,8 @@ class AuthService:
         # Create new tokens
         access_token = create_access_token(user.id)
 
-        new_refresh_token, new_refresh_jti = create_refresh_token(user.id)
+        new_refresh_token = create_refresh_token(user.id)
+        _, new_refresh_jti = decode_refresh_token(new_refresh_token)
 
         # Store new refresh token
         await store_refresh_token(
@@ -180,4 +180,42 @@ class AuthService:
         return TokenResponse(
             access_token=access_token,
             refresh_token=new_refresh_token,
+        )
+
+    async def logout(
+        self,
+        refresh_token: str,
+    ) -> None:
+
+        try:
+            _, jti = decode_refresh_token(refresh_token)
+
+        except ValueError:
+            # Logout should be idempotent.
+            # If token is already invalid/revoked,
+            # there is nothing more to do.
+            return
+
+        await revoke_refresh_token(
+            self.redis,
+            jti,
+        )
+
+    async def change_password(
+        self,
+        user_id,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        user = await self.repository.get_by_id(user_id)
+
+        if user is None or not verify_password(
+            current_password,
+            user.hashed_password,
+        ):
+            raise InvalidCredentialsException("Invalid current password.")
+
+        await self.repository.update_password(
+            user,
+            hash_password(new_password),
         )

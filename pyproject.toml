@@ -16,3 +16,6 @@ select = [
 ignore = [
     "EXE002",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
