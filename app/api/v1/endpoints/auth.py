@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.database import get_db
+from app.api.dependencies.rate_limit import login_rate_limit
 from app.core.exceptions import (
     InactiveUserException,
     InvalidCredentialsException,
@@ -74,6 +75,7 @@ async def register(
     response_model=TokenResponse,
 )
 async def login(
+    _rate_limit: Annotated[None, Depends(login_rate_limit())],
     form_data: Annotated[
         OAuth2PasswordRequestForm,
         Depends(),
@@ -200,3 +202,16 @@ async def change_password(
         ) from exc
 
     return ChangePasswordResponse()
+
+@router.post(
+    "/logout-all",
+    response_model=LogoutResponse,
+)
+async def logout_all(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis: Annotated[Redis, Depends(get_redis)],
+) -> LogoutResponse:
+    service = AuthService(db=db, redis=redis)
+    await service.logout_all(current_user.id)
+    return LogoutResponse(message="All sessions have been logged out")

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 
 async def get_current_user(
+    request: Request,
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -47,6 +48,7 @@ async def get_current_user(
             },
         )
 
+    request.state.user_id = user.id
     return user
 
 
@@ -56,6 +58,7 @@ async def get_current_active_user(
         Depends(get_current_user),
     ],
 ) -> User:
+    print(f"Current user: {current_user}")
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

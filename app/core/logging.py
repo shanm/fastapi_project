@@ -1,0 +1,14 @@
+import sys
+from loguru import logger
+
+logger.remove()
+logger.add(
+    sys.stdout,
+    serialize=True,
+    level="INFO",
+    enqueue=True,
+    backtrace=False,
+    diagnose=False,
+)
+
+__all__ = ["logger"]

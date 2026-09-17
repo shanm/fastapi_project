@@ -1,0 +1,9 @@
+aws_region          = "ap-south-1"
+project_name        = "fastapi-user-management"
+environment         = "prod"
+db_username         = "app_admin"
+github_repository   = "YOUR_GITHUB_ORG/YOUR_REPO"
+enable_https        = true
+acm_certificate_arn = "arn:aws:acm:ap-south-1:123456789012:certificate/REPLACE_ME"
+min_capacity        = 2
+max_capacity        = 6

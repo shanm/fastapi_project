@@ -92,13 +92,15 @@ def decode_token(
 
     Returns the user UUID contained in the `sub` claim.
     """
-
+    print(f"Decoding token: {token}")
     try:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
         )
+
+        print(f"Decoded payload: {payload}")
 
         token_type = payload.get("type")
 
