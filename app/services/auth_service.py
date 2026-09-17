@@ -18,6 +18,7 @@ from app.core.security import (
 from app.services.token_service import (
     get_refresh_token_user,
     revoke_refresh_token,
+    revoke_all_refresh_tokens,
     store_refresh_token,
 )
 
@@ -70,7 +71,7 @@ class AuthService:
         # 5. Create SQLAlchemy model
         new_user = User(
             username=user_data.username,
-            email=str(user_data.email),
+            email=email,
             hashed_password=hashed_password,
             role_id=role.id,
         )
@@ -201,6 +202,9 @@ class AuthService:
             jti,
         )
 
+    async def logout_all(self, user_id) -> None:
+        await revoke_all_refresh_tokens(self.redis, str(user_id))
+
     async def change_password(
         self,
         user_id,
@@ -219,3 +223,6 @@ class AuthService:
             user,
             hash_password(new_password),
         )
+        # A password change invalidates every refresh session so a previously
+        # issued refresh token cannot be used to regain a session.
+        await revoke_all_refresh_tokens(self.redis, str(user.id))

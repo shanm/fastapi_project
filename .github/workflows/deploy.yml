@@ -1,0 +1,123 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: fastapi-user-management-prod
+  ECS_CLUSTER: fastapi-user-management-prod
+  ECS_SERVICE: fastapi-user-management-prod
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: demo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d demo"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Migrate test database
+        env:
+          SECRET_KEY: "test-secret-key-that-is-at-least-32-characters-long"
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: demo
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: alembic upgrade head
+      - name: Test
+        env:
+          SECRET_KEY: "test-secret-key-that-is-at-least-32-characters-long"
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: demo
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: pytest -v
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push immutable image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/${ECR_REPOSITORY}:${GITHUB_SHA}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Register task definition with new image
+        run: |
+          aws ecs describe-task-definition             --task-definition "$ECS_SERVICE"             --query taskDefinition             --output json > task-definition.json
+
+          jq --arg IMAGE "$IMAGE"             '.containerDefinitions[0].image=$IMAGE
+             | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
+                   .compatibilities,.registeredAt,.registeredBy)'             task-definition.json > task-definition-new.json
+
+          TASK_DEF_ARN=$(aws ecs register-task-definition             --cli-input-json file://task-definition-new.json             --query 'taskDefinition.taskDefinitionArn'             --output text)
+
+          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> "$GITHUB_ENV"
+
+      - name: Run database migrations
+        run: |
+          SUBNETS=$(aws ecs describe-services             --cluster "$ECS_CLUSTER"             --services "$ECS_SERVICE"             --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets'             --output text | tr '	' ',')
+
+          SECURITY_GROUP=$(aws ecs describe-services             --cluster "$ECS_CLUSTER"             --services "$ECS_SERVICE"             --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups[0]'             --output text)
+
+          TASK_ARN=$(aws ecs run-task             --cluster "$ECS_CLUSTER"             --task-definition "$TASK_DEF_ARN"             --launch-type FARGATE             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}"             --overrides '{"containerOverrides":[{"name":"api","command":["alembic","upgrade","head"]}]}'             --query 'tasks[0].taskArn'             --output text)
+
+          echo "Migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped             --cluster "$ECS_CLUSTER"             --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks             --cluster "$ECS_CLUSTER"             --tasks "$TASK_ARN"             --query 'tasks[0].containers[0].exitCode'             --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Database migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: Deploy ECS service
+        run: |
+          aws ecs update-service             --cluster "$ECS_CLUSTER"             --service "$ECS_SERVICE"             --task-definition "$TASK_DEF_ARN"
+
+          aws ecs wait services-stable             --cluster "$ECS_CLUSTER"             --services "$ECS_SERVICE"

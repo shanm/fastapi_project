@@ -1,0 +1,24 @@
+def configure_opentelemetry(app) -> None:
+    from app.core.config import settings
+
+    if not settings.OTEL_ENABLED:
+        return
+
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ImportError:
+        raise RuntimeError(
+            'OTEL_ENABLED=true requires the OpenTelemetry dependencies to be installed.'
+        ) from None
+
+    resource = Resource.create({'service.name': settings.OTEL_SERVICE_NAME})
+    provider = TracerProvider(resource=resource)
+    exporter = OTLPSpanExporter(endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT)
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)

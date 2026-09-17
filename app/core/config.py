@@ -22,6 +22,22 @@ class Settings(BaseSettings):
 
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
+    REDIS_HEALTH_CHECK_INTERVAL: int = 30
+    REDIS_SOCKET_TIMEOUT: float = 5.0
+    REDIS_SOCKET_CONNECT_TIMEOUT: float = 5.0
+    REDIS_SSL: bool = False
+
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
+
+    OTEL_ENABLED: bool = False
+    OTEL_SERVICE_NAME: str = "fastapi-user-management"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4318/v1/traces"
+
+    CORS_ALLOW_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    ALLOWED_HOSTS: list[str] = ["*"]
 
     @property
     def database_url(self) -> str:
