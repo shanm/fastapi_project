@@ -1,5 +1,6 @@
 fastapi[standard]
 sqlalchemy
+greenlet
 asyncpg
 alembic
 pydantic
