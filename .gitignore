@@ -24,3 +24,18 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Terraform generated files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Terraform variable files that may contain secrets
+*.tfvars
+*.tfvars.json
+
+# Keep reusable Terraform dependency lock files
+!**/.terraform.lock.hcl

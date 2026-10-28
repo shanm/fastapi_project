@@ -15,6 +15,8 @@ from app.api.dependencies.database import get_db
 from app.core.redis import get_redis
 from app.db.models.base import Base
 
+from redis.asyncio import Redis
+
 
 TEST_DATABASE_URL = settings.database_url
 
@@ -67,6 +69,7 @@ def client() -> TestClient:
         return Redis(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
             decode_responses=True,
         )
 
@@ -119,3 +122,20 @@ def authenticated_user(client, user_role):
     )
 
     return response.json()
+
+
+@pytest.fixture(autouse=True)
+async def reset_test_login_rate_limit():
+    redis = Redis(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        db=settings.REDIS_DB,
+        decode_responses=True,
+    )
+
+    try:
+        async for key in redis.scan_iter(match="rate:login:*"):
+            await redis.delete(key)
+        yield
+    finally:
+        await redis.aclose()
