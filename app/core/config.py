@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     REDIS_SOCKET_TIMEOUT: float = 5.0
     REDIS_SOCKET_CONNECT_TIMEOUT: float = 5.0
     REDIS_SSL: bool = False
+    REDIS_DB: int = 0
 
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20

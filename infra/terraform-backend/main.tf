@@ -24,14 +24,14 @@ resource "aws_subnet" "public" {
 resource "aws_subnet" "private_app" {
   count             = 2
   vpc_id            = aws_vpc.main.id
-  cidr_block         = cidrsubnet(var.vpc_cidr, 8, count.index + 10)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 10)
   availability_zone = local.azs[count.index]
 }
 
 resource "aws_subnet" "private_data" {
   count             = 2
   vpc_id            = aws_vpc.main.id
-  cidr_block         = cidrsubnet(var.vpc_cidr, 8, count.index + 20)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 20)
   availability_zone = local.azs[count.index]
 }
 
@@ -90,6 +90,7 @@ resource "aws_route_table_association" "private_data" {
 
 resource "aws_ecr_repository" "api" {
   name                 = local.name
+  force_delete         = true
   image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
@@ -105,12 +106,14 @@ resource "aws_ecr_lifecycle_policy" "api" {
       rulePriority = 1
       description  = "Keep the most recent 30 tagged images"
       selection = {
-        tagStatus   = "tagged"
-        tagPrefixList = [""]
-        countType   = "imageCountMoreThan"
-        countNumber = 30
+        tagStatus      = "tagged"
+        tagPatternList = ["*"]
+        countType      = "imageCountMoreThan"
+        countNumber    = 30
       }
-      action = { type = "expire" }
+      action = {
+        type = "expire"
+      }
     }]
   })
 }
@@ -201,21 +204,21 @@ resource "aws_db_instance" "postgres" {
   identifier                  = local.name
   engine                      = "postgres"
   engine_version              = "17"
-  instance_class               = "db.t4g.micro"
-  allocated_storage            = 20
-  max_allocated_storage        = 100
-  db_name                      = var.db_name
-  username                     = var.db_username
-  manage_master_user_password  = true
-  db_subnet_group_name         = aws_db_subnet_group.postgres.name
+  instance_class              = "db.t4g.micro"
+  allocated_storage           = 20
+  max_allocated_storage       = 100
+  db_name                     = var.db_name
+  username                    = var.db_username
+  manage_master_user_password = true
+  db_subnet_group_name        = aws_db_subnet_group.postgres.name
   vpc_security_group_ids      = [aws_security_group.db.id]
-  publicly_accessible          = false
-  storage_encrypted            = true
-  backup_retention_period      = 7
-  deletion_protection          = true
-  skip_final_snapshot          = false
-  multi_az                     = true
-  copy_tags_to_snapshot        = true
+  publicly_accessible         = false
+  storage_encrypted           = true
+  backup_retention_period     = 1
+  deletion_protection         = false
+  skip_final_snapshot         = true
+  multi_az                    = false
+  copy_tags_to_snapshot       = true
 }
 
 resource "aws_elasticache_subnet_group" "redis" {
@@ -256,8 +259,8 @@ resource "aws_lb_target_group" "app" {
     healthy_threshold   = 2
     unhealthy_threshold = 3
     timeout             = 5
-    interval             = 30
-    matcher              = "200"
+    interval            = 30
+    matcher             = "200"
   }
 }
 
@@ -271,6 +274,7 @@ resource "aws_lb_listener" "http" {
 
     dynamic "redirect" {
       for_each = var.enable_https ? [1] : []
+
       content {
         port        = "443"
         protocol    = "HTTPS"
@@ -280,8 +284,11 @@ resource "aws_lb_listener" "http" {
 
     dynamic "forward" {
       for_each = var.enable_https ? [] : [1]
+
       content {
-        target_group_arn = aws_lb_target_group.app.arn
+        target_group {
+          arn = aws_lb_target_group.app.arn
+        }
       }
     }
   }
@@ -323,9 +330,9 @@ resource "aws_iam_role" "ecs_task_execution" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action = "sts:AssumeRole"
+      Action    = "sts:AssumeRole"
     }]
   })
 }
@@ -341,15 +348,15 @@ resource "aws_iam_role" "ecs_task" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action = "sts:AssumeRole"
+      Action    = "sts:AssumeRole"
     }]
   })
 }
 
 resource "aws_iam_role_policy" "ecs_task_secrets" {
-  role = aws_iam_role.ecs_task.id
+  role = aws_iam_role.ecs_task_execution.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -561,10 +568,10 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
 
 # CloudWatch alarms for the main failure modes.
 resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
-  alarm_name          = "${local.name}-alb-5xx"
-  alarm_description   = "ALB target/server errors"
-  namespace           = "AWS/ApplicationELB"
-  metric_name         = "HTTPCode_Target_5XX_Count"
+  alarm_name        = "${local.name}-alb-5xx"
+  alarm_description = "ALB target/server errors"
+  namespace         = "AWS/ApplicationELB"
+  metric_name       = "HTTPCode_Target_5XX_Count"
   dimensions = {
     LoadBalancer = aws_lb.app.arn_suffix
   }
@@ -577,10 +584,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_cpu" {
-  alarm_name          = "${local.name}-ecs-cpu"
-  alarm_description   = "ECS service CPU is high"
-  namespace           = "AWS/ECS"
-  metric_name         = "CPUUtilization"
+  alarm_name        = "${local.name}-ecs-cpu"
+  alarm_description = "ECS service CPU is high"
+  namespace         = "AWS/ECS"
+  metric_name       = "CPUUtilization"
   dimensions = {
     ClusterName = aws_ecs_cluster.app.name
     ServiceName = aws_ecs_service.app.name
@@ -594,10 +601,10 @@ resource "aws_cloudwatch_metric_alarm" "ecs_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_running_tasks" {
-  alarm_name          = "${local.name}-ecs-running-tasks"
-  alarm_description   = "ECS service has fewer running tasks than expected"
-  namespace           = "ECS/ContainerInsights"
-  metric_name         = "RunningTaskCount"
+  alarm_name        = "${local.name}-ecs-running-tasks"
+  alarm_description = "ECS service has fewer running tasks than expected"
+  namespace         = "ECS/ContainerInsights"
+  metric_name       = "RunningTaskCount"
   dimensions = {
     ClusterName = aws_ecs_cluster.app.name
     ServiceName = aws_ecs_service.app.name
